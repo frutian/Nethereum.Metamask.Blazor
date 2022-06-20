@@ -9,7 +9,8 @@
 @using Nethereum.Web3;
 @using Nethereum.Hex.HexTypes;
 @using Nethereum.Siwe.Core
-@using Nethereum.Util
+@using Nethereum.Siwe
+@using Nethereum.Signer;
 @using Microsoft.AspNetCore.Components.Authorization
 @using System.Security.Claims
 
@@ -58,6 +59,20 @@
             </div>
         </div>
 
+        <div class="card m-1">
+            <div class="card-body">
+                <div class="row">
+                    <label class="col-sm-3 col-form-label-lg">Stablebattle sign message</label>
+                    <div class="col-sm-6">
+                        <button @onclick="@TryToSign">Sign</button>
+                        <div>@ValidSigner</div>
+                        <div>@addressRec1</div>
+                        <small id="selectedAccountHelp" class="form-text text-muted">Proto auth</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <Erc20Transfer></Erc20Transfer>
     </Authorized>
     <NotAuthorized>
@@ -78,15 +93,21 @@
     string SelectedAccount { get; set; }
     int SelectedChainId { get; set; }
     string BlockHash { get; set; }
+    bool ValidSigner { get; set; }
     string ErrorAuthenticateMessage { get; set; }
+
+    //
+    string addressRec1 { get; set; }
 
     string UserName { get; set; }
     protected string AuthenticatedAccount { get; set; }
     IEthereumHostProvider _ethereumHostProvider;
 
+    private SiweMessageService _siweMessageService;
+
     protected override void OnInitialized()
     {
-         _ethereumHostProvider = selectedHostProviderService.SelectedHost;
+        _ethereumHostProvider = selectedHostProviderService.SelectedHost;
         _ethereumHostProvider.SelectedAccountChanged += HostProvider_SelectedAccountChanged;
         _ethereumHostProvider.NetworkChanged += HostProvider_NetworkChanged;
         _ethereumHostProvider.EnabledChanged += HostProviderOnEnabledChanged;
@@ -158,5 +179,30 @@
         var block = await web3.Eth.Blocks.GetBlockWithTransactionsByNumber.SendRequestAsync(new HexBigInteger(1));
         BlockHash = block.BlockHash;
     }
- }
+
+    private async Task TryToSign()
+    {
+
+        _siweMessageService = new SiweMessageService();
+
+        var siweMessage = new SiweMessage()
+        {
+            Address = Web3.ToChecksumAddress(SelectedAccount),
+            ChainId = SelectedChainId.ToString(),
+            Uri = _navigationManager.ToAbsoluteUri("").ToString(),
+            Domain = _navigationManager.ToAbsoluteUri("").Host,
+            Statement = "Please sign in to authenticate to Stable",
+
+        };
+
+        var siweMessagestring = _siweMessageService.BuildMessageToSign(siweMessage);
+        var signedMessage = await _ethereumHostProvider.SignMessageAsync(siweMessagestring);
+        ValidSigner = await _siweMessageService.IsMessageSignatureValid(siweMessage, signedMessage);
+
+        //it can be implemented in a simpler way
+        var signer1 = new EthereumMessageSigner();
+        addressRec1 = signer1.EncodeUTF8AndEcRecover(siweMessagestring, signedMessage);
+
+    }
+}
 
