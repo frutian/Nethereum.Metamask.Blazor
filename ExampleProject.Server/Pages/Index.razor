@@ -11,8 +11,19 @@
 @using Nethereum.Siwe.Core
 @using Nethereum.Siwe
 @using Nethereum.Signer;
+@using Nethereum.RPC.Eth.DTOs;
+@using Nethereum.ABI.FunctionEncoding.Attributes;
+@using Nethereum.BlockchainProcessing.Processor;
+@using Nethereum.Contracts;
 @using Microsoft.AspNetCore.Components.Authorization
 @using System.Security.Claims
+
+@using System;
+@using System.Collections.Generic;
+@using System.Numerics;
+@using System.Threading;
+@using System.Threading.Tasks;
+
 
 
 <AuthorizeView Roles="EthereumConnected">
@@ -104,6 +115,20 @@
     IEthereumHostProvider _ethereumHostProvider;
 
     private SiweMessageService _siweMessageService;
+
+
+    [Event("KnightMinted")]
+    public class KnightMintedEvent : IEventDTO
+    {
+        [Nethereum.ABI.FunctionEncoding.Attributes.Parameter("uint256", "item_id", 1)]
+        public BigInteger ItemID { get; set; }
+
+        [Nethereum.ABI.FunctionEncoding.Attributes.Parameter("address", "wallet", 2)]
+        public string Wallet { get; set; }
+
+        [Nethereum.ABI.FunctionEncoding.Attributes.Parameter("uint8", "kt", 3)]
+        public BigInteger Type { get; set; }
+    }
 
     protected override void OnInitialized()
     {
@@ -202,6 +227,34 @@
         //it can be implemented in a simpler way
         var signer1 = new EthereumMessageSigner();
         addressRec1 = signer1.EncodeUTF8AndEcRecover(siweMessagestring, signedMessage);
+
+
+        Console.WriteLine($"START");
+        //var logs = new List<FilterLog>();
+
+        var knightMintedEventsLogs = new List<EventLog<KnightMintedEvent>>();
+
+        var web3 = new Web3("https://polygon-mumbai.g.alchemy.com/v2/06dAbXIkfLaTHUO5_f3OUSYsGnTqBCxH");
+
+
+        //var KinightMintedEventsHandler = new EventLogProcessorHandler<KnightMintedEvent>(eventLog => knightMintedEventsLogs.Add(eventLog));
+
+        //create our processor to retrieve the logs
+        var processor = web3.Processing.Logs.CreateProcessorForContract<KnightMintedEvent>(
+        "0x59586F14B1C31179f1A9aE2F4C18c5BF8bF5B6bf", log => knightMintedEventsLogs.Add(log));
+
+        //if we need to stop the processor mid execution - call cancel on the token
+        var cancellationToken = new CancellationToken();
+
+        //crawl the required block range
+        await processor.ExecuteAsync(
+            toBlockNumber: new BigInteger(26845184),
+            cancellationToken: cancellationToken,
+            startAtBlockNumberIfNotProcessed: new BigInteger(26845100));
+
+        Console.WriteLine($"LOG: {knightMintedEventsLogs[0]}.");
+
+
 
     }
 }
